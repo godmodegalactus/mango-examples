@@ -1,0 +1,26 @@
+[package]
+name = "mango-examples"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2018"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mango_examples"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.19.0"
+solana-program = "^1.8.1"
+anchor-spl = "0.19.0"
+spl-token = { version = "3.1.1", features = ["no-entrypoint"] }
+mango = {path= "../../../mango-v3/program", features=["no-entrypoint"]}
+mango-macro = { path = "../../../mango-v3/mango-macro" }
+mango-common = { path = "../../../mango-v3/common" }
+mango-logs = { path = "../../../mango-v3/mango-logs", features=["no-entrypoint"] }
