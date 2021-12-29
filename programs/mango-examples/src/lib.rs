@@ -1,72 +1,107 @@
 use anchor_lang::prelude::*;
-use mango::processor::Processor;
+use mango::instruction::{deposit, MangoInstruction};
 use anchor_spl::token::{self, Token, TokenAccount, SetAuthority};
 use spl_token::instruction::AuthorityType;
+use solana_program::instruction::{AccountMeta, Instruction};
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
+pub mod mango_v3_id {
+    use solana_program::declare_id;
+    declare_id!("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68");
+}
+
 #[program]
 pub mod mango_examples {
+    use solana_program::program::invoke_signed;
+
     use super::*;
-    pub fn initialize_account(ctx: Context<InitializeAccounts>, mango_program_id : Pubkey) -> ProgramResult {
-        let mango_instruction = mango::instruction::MangoInstruction::InitMangoAccount;
-        let account_infos : &[AccountInfo] = &[ctx.accounts.mango_group.to_account_info(), 
-                                                ctx.accounts.mango_account.to_account_info(),
-                                                ctx.accounts.owner.to_account_info()];
-        let instructions = mango_instruction.pack();
-        Processor::process(
-            &mango_program_id,
-            account_infos,
-            &instructions[..]
-         )?;
+    pub fn initialize_account(ctx: Context<InitializeAccounts>) -> ProgramResult {
+        let program_id : Pubkey = *ctx.program_id;
+        let mango_instruction = MangoInstruction::InitMangoAccount;
+        let account_infos : &[AccountInfo] = &[ ctx.accounts.mango_program_ai.to_account_info().clone(),
+                                                ctx.accounts.mango_group.to_account_info().clone(), 
+                                                ctx.accounts.mango_account.to_account_info().clone(),
+                                                ctx.accounts.owner.to_account_info().clone()];
+
+        let group_key : Pubkey = *ctx.accounts.mango_group.to_account_info().key;
+        let accounts = vec![
+            AccountMeta::new_readonly(group_key, false),
+            AccountMeta::new(*ctx.accounts.mango_account.to_account_info().key, false),
+            AccountMeta::new_readonly(*ctx.accounts.owner.to_account_info().key, true),
+        ];
+        let data = mango_instruction.pack();
+        let sol_instruction = solana_program::instruction::Instruction {
+            program_id,
+            accounts,
+            data,
+        };
+        let seeds = &[
+            ctx.accounts.owner.to_account_info().key.as_ref(),
+        ];
+        let signer = &[&seeds[..]];
+
+        invoke_signed( &sol_instruction, account_infos, signer)?;
+
         Ok(())
     }
 
-    pub fn deposit(ctx: Context<DepositAccounts>, mango_program_id: Pubkey, amount : u64) -> ProgramResult{
-        let mango_instruction = mango::instruction::MangoInstruction::Deposit{quantity:amount};
-
+    pub fn deposit(ctx: Context<DepositAccounts>, amount : u64) -> ProgramResult{
+        let accounts = ctx.accounts;
         let account_infos : &[AccountInfo] = &[
-            ctx.accounts.mango_group.to_account_info(),
-            ctx.accounts.mango_account.to_account_info(),
-            ctx.accounts.owner.to_account_info(),
-            ctx.accounts.mango_cache_ai.to_account_info(),
-            ctx.accounts.root_bank_ai.to_account_info(),
-            ctx.accounts.node_bank_ai.to_account_info(),
-            ctx.accounts.vault.to_account_info(),
-            ctx.accounts.token_program.to_account_info(),
-            ctx.accounts.client_token_account.to_account_info(),
+            accounts.mango_program_ai.clone(),
+            accounts.mango_group.clone(),
+            accounts.mango_account.clone(),
+            accounts.owner.clone(),
+            accounts.mango_cache_ai.clone(),
+            accounts.root_bank_ai.clone(),
+            accounts.node_bank_ai.clone(),
+            accounts.vault.clone(),
+            accounts.client_token_account.to_account_info().clone(),
+            accounts.token_program.to_account_info().clone(),
 
         ];
-        let instructions = mango_instruction.pack();
-
         {
             // temporarily transfer authority of account to owner before applying 
             let cpi_acc = SetAuthority {
-                account_or_mint: ctx.accounts.client_token_account.to_account_info().clone(),
-                current_authority: ctx.accounts.client.clone(),
+                account_or_mint: accounts.client_token_account.to_account_info().clone(),
+                current_authority: accounts.client.clone(),
             };
-            let cpi = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_acc);
-            token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*ctx.accounts.owner.key))?;
+            let cpi = CpiContext::new(accounts.token_program.to_account_info(), cpi_acc);
+            token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.owner.key))?;
         }
-        Processor::process(
-            &mango_program_id,
-            account_infos,
-            &instructions[..],
-        )?;
+
+        let seeds = &[
+            accounts.owner.to_account_info().key.as_ref(),
+        ];
+        let signer = &[&seeds[..]];
+        let deposit_instruction = mango::instruction::deposit(accounts.mango_program_ai.key,
+            accounts.mango_group.key,
+            accounts.mango_account.key,
+            accounts.owner.key,
+            accounts.mango_cache_ai.key,
+            accounts.root_bank_ai.key,
+            accounts.node_bank_ai.key,
+            accounts.vault.key,
+            accounts.client_token_account.to_account_info().key,
+
+            amount)?;
+            // call mango
+        invoke_signed( &deposit_instruction, account_infos, signer) ?;
 
         {
             // transfer ownership back to the client
             let cpi_acc = SetAuthority {
-                account_or_mint: ctx.accounts.client_token_account.to_account_info().clone(),
-                current_authority: ctx.accounts.owner.clone(),
+                account_or_mint: accounts.client_token_account.to_account_info().clone(),
+                current_authority: accounts.owner.clone(),
             };
-            let cpi = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_acc);
-            token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*ctx.accounts.client.key))?;
+            let cpi = CpiContext::new(accounts.token_program.to_account_info(), cpi_acc);
+            token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.client.key))?;
         }
 
-        ctx.accounts.client_account_info.client_key = *ctx.accounts.client.key;
-        ctx.accounts.client_account_info.mint = ctx.accounts.client_token_account.mint;
-        ctx.accounts.client_account_info.amount += amount;
+        accounts.client_account_info.client_key = *accounts.client.key;
+        accounts.client_account_info.mint = accounts.client_token_account.mint;
+        accounts.client_account_info.amount += amount;
         Ok(())
     }
 }
@@ -74,6 +109,7 @@ pub mod mango_examples {
 // check instruction.rs in mango-v3 repo to find out which accounts are required.
 #[derive(Accounts)]
 pub struct InitializeAccounts<'info> {
+    mango_program_ai : AccountInfo<'info>,
     mango_group: AccountInfo<'info>,
     #[account(mut)]
     mango_account: AccountInfo<'info>,
@@ -83,6 +119,7 @@ pub struct InitializeAccounts<'info> {
 
 #[derive(Accounts)]
 pub struct DepositAccounts<'info> {
+    mango_program_ai : AccountInfo<'info>,
     mango_group: AccountInfo<'info>,
     #[account(mut)]
     mango_account: AccountInfo<'info>,
