@@ -1,29 +1,29 @@
 use anchor_lang::prelude::*;
 use mango::instruction::{deposit, MangoInstruction};
+use mango::state::MangoAccount;
 use anchor_spl::token::{self, Token, TokenAccount, SetAuthority};
 use spl_token::instruction::AuthorityType;
 use solana_program::instruction::{AccountMeta, Instruction};
+use std::mem::size_of;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
-
-pub mod mango_v3_id {
-    use solana_program::declare_id;
-    declare_id!("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68");
-}
 
 #[program]
 pub mod mango_examples {
     use solana_program::program::invoke_signed;
+    use solana_program::program::invoke;
 
     use super::*;
     pub fn initialize_account(ctx: Context<InitializeAccounts>) -> ProgramResult {
+        msg!("started");
         let program_id : Pubkey = *ctx.program_id;
+        
         let mango_instruction = MangoInstruction::InitMangoAccount;
         let account_infos : &[AccountInfo] = &[ ctx.accounts.mango_program_ai.to_account_info().clone(),
                                                 ctx.accounts.mango_group.to_account_info().clone(), 
                                                 ctx.accounts.mango_account.to_account_info().clone(),
                                                 ctx.accounts.owner.to_account_info().clone()];
-
+        msg!("Create instructions");
         let group_key : Pubkey = *ctx.accounts.mango_group.to_account_info().key;
         let accounts = vec![
             AccountMeta::new_readonly(group_key, false),
@@ -32,16 +32,12 @@ pub mod mango_examples {
         ];
         let data = mango_instruction.pack();
         let sol_instruction = solana_program::instruction::Instruction {
-            program_id,
+            program_id: *ctx.accounts.mango_program_ai.key,
             accounts,
             data,
         };
-        let seeds = &[
-            ctx.accounts.owner.to_account_info().key.as_ref(),
-        ];
-        let signer = &[&seeds[..]];
-
-        invoke_signed( &sol_instruction, account_infos, signer)?;
+        msg!("invoke mango");
+        invoke( &sol_instruction, account_infos)?;
 
         Ok(())
     }
@@ -111,10 +107,10 @@ pub mod mango_examples {
 pub struct InitializeAccounts<'info> {
     mango_program_ai : AccountInfo<'info>,
     mango_group: AccountInfo<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = *mango_account.owner == *mango_program_ai.key)]
     mango_account: AccountInfo<'info>,
-    #[account(signer)]
-    owner: AccountInfo<'info>,
+    //#[account(signer)]
+    owner: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -155,3 +151,66 @@ pub struct ClientAccountInfo{
 impl ClientAccountInfo {
     const LEN : usize = 64 + 64 + 64; 
 }
+
+
+// //This part of code is to test mainly initialize mango
+// #[derive(Accounts)]
+// pub struct InitializeMango<'info>{
+//     #[account(mut)]
+//     mango_program_ai: AccountInfo<'info>,
+//     #[account(mut)]
+//     serum_program_ai: AccountInfo<'info>,
+//     #[account(mut)]
+//     mango_group: AccountInfo<'info>,
+//     #[account(mut)]
+//     mango_account: AccountInfo<'info>,
+//     #[account(mut)]
+//     mango_cache_ai : AccountInfo<'info>,
+//     #[account(mut)]
+//     root_bank_ai : AccountInfo<'info>,
+//     #[account(mut)]
+//     node_bank_ai : AccountInfo<'info>,
+//     #[account(mut)]
+//     mango_mint_authority : AccountInfo<'info>,
+//     #[account(mut)]
+//     srm_mint_authority : AccountInfo<'info>,
+// }
+
+// fn process_serum_instruction(
+//     program_id: &Pubkey,
+//     accounts: &[AccountInfo],
+//     instruction_data: &[u8],
+// ) -> ProgramResult {
+//     Ok(serum_dex::state::State::process(program_id, accounts, instruction_data)?)
+// }
+
+// fn process_mango_instructions(
+//     program_id: &Pubkey,
+//     accounts: &[AccountInfo],
+//     instruction_data: &[u8],
+// ) -> ProgramResult {
+//     Ok(mango::processor::Processor::process(program_id, accounts, instruction_data)?)
+// }
+// trait AddPacked {
+//     fn add_packable_account<T: Pack>(
+//         &mut self,
+//         pubkey: Pubkey,
+//         amount: u64,
+//         data: &T,
+//         owner: &Pubkey,
+//     );
+// }
+
+// impl AddPacked for ProgramTest {
+//     fn add_packable_account<T: Pack>(
+//         &mut self,
+//         pubkey: Pubkey,
+//         amount: u64,
+//         data: &T,
+//         owner: &Pubkey,
+//     ) {
+//         let mut account = solana_sdk::account::Account::new(amount, T::get_packed_len(), owner);
+//         data.pack_into_slice(&mut account.data);
+//         self.add_account(pubkey, account);
+//     }
+// }
