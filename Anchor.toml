@@ -5,7 +5,7 @@ mango_examples = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
 url = "https://anchor.projectserum.com"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "/home/prat/.config/solana/id.json"
 
 [scripts]

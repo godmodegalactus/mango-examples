@@ -123,6 +123,7 @@ async function main() {
     }
     console.log("sleeping for 1 minute (so that we do not get errors)");
     await sleep(60000);
+    const tokentIndex = 15; //usdc
     // initialize for deposit
 
     let client = new mango_client.MangoClient(connection, new web3.PublicKey(mango_programid));
@@ -130,15 +131,15 @@ async function main() {
     let cache = await mango_group.loadCache(connection);
     let root_banks = await mango_group.loadRootBanks(connection);
 
-    const node_bank_key = root_banks[3].nodeBanks[0];
+    const node_bank_key = root_banks[tokentIndex].nodeBanks[0];
     const node_bank_acc = await connection.getAccountInfo(node_bank_key);
     const node_bank = mango_client.NodeBankLayout.decode(node_bank_acc.data);
     const vault = new web3.PublicKey(node_bank.vault);
     const mango_cache = cache.publicKey;
-    const root_bank = root_banks[3].publicKey;
+    const root_bank = root_banks[tokentIndex].publicKey;
     const client1 = web3.Keypair.fromSecretKey(bs58.decode("588FU4PktJWfGfxtzpAAXywSNt74AvtroVzGfKkVN1LwRuvHwKGr851uH8czM5qm4iqLbs1kKoMKtMJG4ATR7Ld2"));
     
-    const token_mint = new web3.PublicKey("So11111111111111111111111111111111111111112");
+    const token_mint = mango_group.tokens[tokentIndex].mint;
     console.log("token mint : " + token_mint)
     var token = new splToken.Token(
         connection,

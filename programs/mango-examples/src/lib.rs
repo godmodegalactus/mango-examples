@@ -99,9 +99,9 @@ pub mod mango_examples {
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.client.key))?;
         }
         msg!("setting client info");
-        // accounts.client_account_info.client_key = *accounts.client.key;
-        // accounts.client_account_info.mint = accounts.client_token_account.mint;
-        // accounts.client_account_info.amount += amount;
+        accounts.client_account_info.client_key = *accounts.client.key;
+        accounts.client_account_info.mint = accounts.client_token_account.mint;
+        accounts.client_account_info.amount += amount;
         Ok(())
     }
 }
@@ -141,8 +141,8 @@ pub struct DepositAccounts<'info> {
     #[account(signer,
         constraint = client_token_account.owner == *client.key)]
     client : AccountInfo<'info>,
-    // #[account(init, seeds=[&client.key.to_bytes()], bump, payer = owner, space = 8 + ClientAccountInfo::LEN )]
-    // client_account_info : Account<'info, ClientAccountInfo>,
+    #[account(init, seeds=[&client.key.to_bytes()], bump, payer = owner, space = 8 + ClientAccountInfo::LEN )]
+    client_account_info : Account<'info, ClientAccountInfo>,
 }
 
 #[account]
