@@ -42,7 +42,8 @@ pub mod mango_examples {
         Ok(())
     }
 
-    pub fn deposit(ctx: Context<DepositAccounts>, amount : u64) -> ProgramResult{
+    pub fn deposit(ctx: Context<DepositAccounts>, amount : u64, bump: u8) -> ProgramResult{
+        msg!("start deposit");
         let accounts = ctx.accounts;
         let account_infos : &[AccountInfo] = &[
             accounts.mango_program_ai.clone(),
@@ -58,6 +59,7 @@ pub mod mango_examples {
 
         ];
         {
+            msg!("changing authority");
             // temporarily transfer authority of account to owner before applying 
             let cpi_acc = SetAuthority {
                 account_or_mint: accounts.client_token_account.to_account_info().clone(),
@@ -71,6 +73,7 @@ pub mod mango_examples {
             accounts.owner.to_account_info().key.as_ref(),
         ];
         let signer = &[&seeds[..]];
+        msg!("calling mango deposit");
         let deposit_instruction = mango::instruction::deposit(accounts.mango_program_ai.key,
             accounts.mango_group.key,
             accounts.mango_account.key,
@@ -83,9 +86,10 @@ pub mod mango_examples {
 
             amount)?;
             // call mango
-        invoke_signed( &deposit_instruction, account_infos, signer) ?;
+        invoke( &deposit_instruction, account_infos) ?;
 
         {
+            msg!("setting back ownership");
             // transfer ownership back to the client
             let cpi_acc = SetAuthority {
                 account_or_mint: accounts.client_token_account.to_account_info().clone(),
@@ -94,10 +98,10 @@ pub mod mango_examples {
             let cpi = CpiContext::new(accounts.token_program.to_account_info(), cpi_acc);
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.client.key))?;
         }
-
-        accounts.client_account_info.client_key = *accounts.client.key;
-        accounts.client_account_info.mint = accounts.client_token_account.mint;
-        accounts.client_account_info.amount += amount;
+        msg!("setting client info");
+        // accounts.client_account_info.client_key = *accounts.client.key;
+        // accounts.client_account_info.mint = accounts.client_token_account.mint;
+        // accounts.client_account_info.amount += amount;
         Ok(())
     }
 }
@@ -114,6 +118,7 @@ pub struct InitializeAccounts<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(amount: u64, bump: u8)]
 pub struct DepositAccounts<'info> {
     mango_program_ai : AccountInfo<'info>,
     mango_group: AccountInfo<'info>,
@@ -127,7 +132,6 @@ pub struct DepositAccounts<'info> {
     node_bank_ai : AccountInfo<'info>,
     #[account(mut)]
     vault : AccountInfo<'info>,
-    #[account(mut)]
     client_token_account : Account<'info, TokenAccount>,
 
     pub token_program: Program<'info, Token>,
@@ -137,80 +141,17 @@ pub struct DepositAccounts<'info> {
     #[account(signer,
         constraint = client_token_account.owner == *client.key)]
     client : AccountInfo<'info>,
-    #[account(init_if_needed, payer = owner, space = 8 + ClientAccountInfo::LEN )]
-    client_account_info : Account<'info,ClientAccountInfo>,
+    // #[account(init, seeds=[&client.key.to_bytes()], bump, payer = owner, space = 8 + ClientAccountInfo::LEN )]
+    // client_account_info : Account<'info, ClientAccountInfo>,
 }
 
 #[account]
 pub struct ClientAccountInfo{
-    client_key : Pubkey,
-    mint : Pubkey,
-    amount : u64,
+    pub client_key : Pubkey,
+    pub mint : Pubkey,
+    pub amount : u64,
 }
 
 impl ClientAccountInfo {
-    const LEN : usize = 64 + 64 + 64; 
+    pub const LEN : usize = 64 + 64 + 64; 
 }
-
-
-// //This part of code is to test mainly initialize mango
-// #[derive(Accounts)]
-// pub struct InitializeMango<'info>{
-//     #[account(mut)]
-//     mango_program_ai: AccountInfo<'info>,
-//     #[account(mut)]
-//     serum_program_ai: AccountInfo<'info>,
-//     #[account(mut)]
-//     mango_group: AccountInfo<'info>,
-//     #[account(mut)]
-//     mango_account: AccountInfo<'info>,
-//     #[account(mut)]
-//     mango_cache_ai : AccountInfo<'info>,
-//     #[account(mut)]
-//     root_bank_ai : AccountInfo<'info>,
-//     #[account(mut)]
-//     node_bank_ai : AccountInfo<'info>,
-//     #[account(mut)]
-//     mango_mint_authority : AccountInfo<'info>,
-//     #[account(mut)]
-//     srm_mint_authority : AccountInfo<'info>,
-// }
-
-// fn process_serum_instruction(
-//     program_id: &Pubkey,
-//     accounts: &[AccountInfo],
-//     instruction_data: &[u8],
-// ) -> ProgramResult {
-//     Ok(serum_dex::state::State::process(program_id, accounts, instruction_data)?)
-// }
-
-// fn process_mango_instructions(
-//     program_id: &Pubkey,
-//     accounts: &[AccountInfo],
-//     instruction_data: &[u8],
-// ) -> ProgramResult {
-//     Ok(mango::processor::Processor::process(program_id, accounts, instruction_data)?)
-// }
-// trait AddPacked {
-//     fn add_packable_account<T: Pack>(
-//         &mut self,
-//         pubkey: Pubkey,
-//         amount: u64,
-//         data: &T,
-//         owner: &Pubkey,
-//     );
-// }
-
-// impl AddPacked for ProgramTest {
-//     fn add_packable_account<T: Pack>(
-//         &mut self,
-//         pubkey: Pubkey,
-//         amount: u64,
-//         data: &T,
-//         owner: &Pubkey,
-//     ) {
-//         let mut account = solana_sdk::account::Account::new(amount, T::get_packed_len(), owner);
-//         data.pack_into_slice(&mut account.data);
-//         self.add_account(pubkey, account);
-//     }
-// }
