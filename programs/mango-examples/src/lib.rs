@@ -42,7 +42,7 @@ pub mod mango_examples {
         Ok(())
     }
 
-    pub fn deposit(ctx: Context<DepositAccounts>, amount : u64, bump: u8) -> ProgramResult{
+    pub fn deposit(ctx: Context<DepositAccounts>, _name : String, amount : u64, _acc_bump: u8) -> ProgramResult{
         msg!("start deposit");
         let accounts = ctx.accounts;
         let account_infos : &[AccountInfo] = &[
@@ -98,10 +98,10 @@ pub mod mango_examples {
             let cpi = CpiContext::new(accounts.token_program.to_account_info(), cpi_acc);
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.client.key))?;
         }
-        msg!("setting client info");
-        accounts.client_account_info.client_key = *accounts.client.key;
-        accounts.client_account_info.mint = accounts.client_token_account.mint;
-        accounts.client_account_info.amount += amount;
+        // msg!("setting client info");
+        // accounts.client_account_info.client_key = *accounts.client.key;
+        // accounts.client_account_info.mint = accounts.client_token_account.mint;
+        // accounts.client_account_info.amount += amount;
         Ok(())
     }
 }
@@ -118,13 +118,13 @@ pub struct InitializeAccounts<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(amount: u64, bump: u8)]
+#[instruction(name : String, amount: u64, acc_bump: u8)]
 pub struct DepositAccounts<'info> {
     mango_program_ai : AccountInfo<'info>,
     mango_group: AccountInfo<'info>,
     #[account(mut)]
     mango_account: AccountInfo<'info>,
-    #[account(signer)]
+    #[account(mut, signer)]
     owner : AccountInfo<'info>,
     mango_cache_ai : AccountInfo<'info>,
     root_bank_ai : AccountInfo<'info>,
@@ -132,20 +132,26 @@ pub struct DepositAccounts<'info> {
     node_bank_ai : AccountInfo<'info>,
     #[account(mut)]
     vault : AccountInfo<'info>,
+    
+    #[account(mut)]
     client_token_account : Account<'info, TokenAccount>,
-
-    pub token_program: Program<'info, Token>,
-    pub system_program: Program<'info, System>,
-
 // custom fields
-    #[account(signer,
+    #[account(mut, signer,
         constraint = client_token_account.owner == *client.key)]
     client : AccountInfo<'info>,
-    #[account(init, seeds=[&client.key.to_bytes()], bump, payer = owner, space = 8 + ClientAccountInfo::LEN )]
-    client_account_info : Account<'info, ClientAccountInfo>,
+
+    #[account( init,
+        seeds = [name.as_bytes()],
+        bump = acc_bump, 
+        payer = client, 
+        space = 8 + ClientAccountInfo::LEN )]
+    client_account_info : Loader<'info, ClientAccountInfo>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
-#[account]
+#[account(zero_copy)]
 pub struct ClientAccountInfo{
     pub client_key : Pubkey,
     pub mint : Pubkey,

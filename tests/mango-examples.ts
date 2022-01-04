@@ -4,21 +4,23 @@ import * as mango_client from '@blockworks-foundation/mango-client';
 import { MangoExamples } from '../target/types/mango_examples';
 import * as web3 from '@solana/web3.js'
 import * as splToken from '@solana/spl-token';
+import { assert } from "chai";
+import mlog from 'mocha-logger';
 import {
   PublicKey,
 } from '@solana/web3.js'
-import { sleep } from '@blockworks-foundation/mango-client';
+import { awaitTransactionSignatureConfirmation, sleep } from '@blockworks-foundation/mango-client';
 
 const idsIndex = 2;
 const ids = mango_client.IDS['groups'][idsIndex];
-
+type ClientAccountInfo = anchor.IdlAccounts<MangoExamples>["clientAccountInfo"];
 
 describe('mango-examples', () => {
 
   // Configure the client to use the devnet cluster.
   const provider = anchor.Provider.env();
   anchor.setProvider(provider);
-  const connection = provider.connection;
+  const connection: web3.Connection = provider.connection;
 
   const program = anchor.workspace.MangoExamples as Program<MangoExamples>;
   const mango_group_account = new web3.PublicKey(ids.publicKey);
@@ -36,15 +38,16 @@ describe('mango-examples', () => {
       web3.LAMPORTS_PER_SOL * 2);
     await connection.confirmTransaction(airdropSignature);
 
-    const acc = await web3.PublicKey.createWithSeed(
-      owner.publicKey,
-      mngo,
-      mango_programid,
-    );
-    const size = mango_client.MangoAccountLayout.span;
-    const lamports = await connection.getMinimumBalanceForRentExemption(size);
     // create an account with seed for mango program id
     {
+      const acc = await web3.PublicKey.createWithSeed(
+        owner.publicKey,
+        mngo,
+        mango_programid,
+      );
+      const size = mango_client.MangoAccountLayout.span;
+      const lamports = await connection.getMinimumBalanceForRentExemption(size);
+
       const transaction = new web3.Transaction().add(
         web3.SystemProgram.createAccountWithSeed({
           fromPubkey: owner.publicKey,
@@ -125,30 +128,41 @@ describe('mango-examples', () => {
     ));
 
     // create client into address
-    const [client_acc_info, nonce] = await web3.PublicKey.findProgramAddress( [client.publicKey.toBuffer()], programId);
+    let client_name = "client";
+    const [client_acc_info, nonce] = await web3.PublicKey.findProgramAddress([Buffer.from(client_name)], program.programId); /// i do not know why this is not working. Should work normally
+    mlog.log('client_acc_info address : ' + client_acc_info);
+    mlog.log('client address : ' + client.publicKey);
+    mlog.log('owner address : ' + owner.publicKey);
 
-    program.rpc.deposit(
+    await program.rpc.deposit(
+      client_name,
       new anchor.BN(10000),
       nonce,
       {
-        accounts : {
+        accounts: {
           mangoProgramAi: mango_programid,
-          mangoGroup: mango_group,
+          mangoGroup: mango_group_account,
           mangoAccount: mango_account,
           owner: owner.publicKey,
-          mangoCacheAi : mango_cache,
-          rootBankAi : root_bank,
-          nodeBankAi : node_bank_key,
+          mangoCacheAi: mango_cache,
+          rootBankAi: root_bank,
+          nodeBankAi: node_bank_key,
           vault: vault,
-          clientTokenAccount: client_token_acc,
-          tokenProgram: splToken.TOKEN_PROGRAM_ID,
-          systemProgram: web3.SystemProgram.programId,
+          clientTokenAccount: client_token_acc.address,
           client: client.publicKey,
           clientAccountInfo: client_acc_info,
+          tokenProgram: splToken.TOKEN_PROGRAM_ID,
+          systemProgram: web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         },
-        signers : [owner, client],
+        signers: [owner, client],
       }
     );
+
+    let client_account_info: ClientAccountInfo = await program.account.clientAccountInfo.fetch(client_acc_info);
+    assert.ok(client_account_info.client_key == client.publicKey);
+    assert.ok(client_account_info.mint == token_mint);
+    assert.ok(client_account_info.amount == 10000);
   });
 
 });
