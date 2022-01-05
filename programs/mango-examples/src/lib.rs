@@ -1,22 +1,18 @@
 use anchor_lang::prelude::*;
-use mango::instruction::{deposit, MangoInstruction};
-use mango::state::MangoAccount;
+use mango::instruction::{MangoInstruction};
 use anchor_spl::token::{self, Token, TokenAccount, SetAuthority};
 use spl_token::instruction::AuthorityType;
-use solana_program::instruction::{AccountMeta, Instruction};
-use std::mem::size_of;
+use solana_program::instruction::{AccountMeta};
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 #[program]
 pub mod mango_examples {
-    use solana_program::program::invoke_signed;
     use solana_program::program::invoke;
 
     use super::*;
     pub fn initialize_account(ctx: Context<InitializeAccounts>) -> ProgramResult {
         msg!("started");
-        let program_id : Pubkey = *ctx.program_id;
         
         let mango_instruction = MangoInstruction::InitMangoAccount;
         let account_infos : &[AccountInfo] = &[ ctx.accounts.mango_program_ai.to_account_info().clone(),
@@ -44,7 +40,7 @@ pub mod mango_examples {
 
     pub fn deposit(ctx: Context<DepositAccounts>, _name : String, amount : u64, _acc_bump: u8) -> ProgramResult{
         msg!("start deposit");
-        let accounts = ctx.accounts;
+        let accounts = &ctx.accounts;
         let account_infos : &[AccountInfo] = &[
             accounts.mango_program_ai.clone(),
             accounts.mango_group.clone(),
@@ -68,11 +64,6 @@ pub mod mango_examples {
             let cpi = CpiContext::new(accounts.token_program.to_account_info(), cpi_acc);
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.owner.key))?;
         }
-
-        let seeds = &[
-            accounts.owner.to_account_info().key.as_ref(),
-        ];
-        let signer = &[&seeds[..]];
         msg!("calling mango deposit");
         let deposit_instruction = mango::instruction::deposit(accounts.mango_program_ai.key,
             accounts.mango_group.key,
@@ -98,10 +89,11 @@ pub mod mango_examples {
             let cpi = CpiContext::new(accounts.token_program.to_account_info(), cpi_acc);
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.client.key))?;
         }
-        // msg!("setting client info");
-        // accounts.client_account_info.client_key = *accounts.client.key;
-        // accounts.client_account_info.mint = accounts.client_token_account.mint;
-        // accounts.client_account_info.amount += amount;
+        msg!("setting client info");
+        let mut client_acc_info = ctx.accounts.client_account_info.load_init()?;
+        client_acc_info.client_key = *accounts.client.key;
+        client_acc_info.mint = accounts.client_token_account.mint;
+        client_acc_info.amount += amount;
         Ok(())
     }
 }
@@ -118,7 +110,7 @@ pub struct InitializeAccounts<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(name : String, amount: u64, acc_bump: u8)]
+#[instruction(name : String, _amount: u64, acc_bump: u8)]
 pub struct DepositAccounts<'info> {
     mango_program_ai : AccountInfo<'info>,
     mango_group: AccountInfo<'info>,
@@ -140,7 +132,7 @@ pub struct DepositAccounts<'info> {
         constraint = client_token_account.owner == *client.key)]
     client : AccountInfo<'info>,
 
-    #[account( init,
+    #[account( init_if_needed,
         seeds = [name.as_bytes()],
         bump = acc_bump, 
         payer = client, 
