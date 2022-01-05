@@ -10,6 +10,7 @@ import {
   PublicKey,
 } from '@solana/web3.js'
 import { awaitTransactionSignatureConfirmation, sleep } from '@blockworks-foundation/mango-client';
+const bs58 = require("bs58");
 
 const idsIndex = 2;
 const ids = mango_client.IDS['groups'][idsIndex];
@@ -35,7 +36,7 @@ describe('mango-examples', () => {
     // get some SOL into owners account
     let airdropSignature = await connection.requestAirdrop(
       owner.publicKey,
-      web3.LAMPORTS_PER_SOL * 2);
+      web3.LAMPORTS_PER_SOL * 1);
     await connection.confirmTransaction(airdropSignature);
 
     // create an account with seed for mango program id
@@ -87,7 +88,7 @@ describe('mango-examples', () => {
     );
   });
 
-  const tokentIndex = 3; //solana
+  const tokentIndex = 15; //usdc
   // initialize for deposit
 
   let mango = new mango_client.MangoClient(connection, new web3.PublicKey(mango_programid));
@@ -106,10 +107,10 @@ describe('mango-examples', () => {
     const root_bank = root_banks[tokentIndex].publicKey;
 
     // create client
-    const client = web3.Keypair.generate();
+    const client = web3.Keypair.fromSecretKey(bs58.decode("588FU4PktJWfGfxtzpAAXywSNt74AvtroVzGfKkVN1LwRuvHwKGr851uH8czM5qm4iqLbs1kKoMKtMJG4ATR7Ld2"));//web3.Keypair.generate();
     await connection.confirmTransaction(await connection.requestAirdrop(
       client.publicKey,
-      web3.LAMPORTS_PER_SOL * 2,
+      web3.LAMPORTS_PER_SOL * 1,
     ));
     await sleep(10 * 1000);
 
@@ -122,18 +123,11 @@ describe('mango-examples', () => {
     );
 
     const client_token_acc = await token.getOrCreateAssociatedAccountInfo(client.publicKey);
-    await connection.confirmTransaction(await connection.requestAirdrop(
-      client_token_acc.address,
-      web3.LAMPORTS_PER_SOL * 2,
-    ));
     // create client into address
-    const [client_acc_info, nonce] = await web3.PublicKey.findProgramAddress([Buffer.from("mango-client-info"), client.publicKey.toBuffer()], program.programId);
-    mlog.log('client_acc_info address : ' + client_acc_info);
-    mlog.log('client address : ' + client.publicKey);
-    mlog.log('owner address : ' + owner.publicKey);
+    const [client_acc_info, nonce] = await web3.PublicKey.findProgramAddress([Buffer.from("mango-client-info"), client.publicKey.toBuffer(), owner.publicKey.toBuffer()], program.programId);
 
     await program.rpc.deposit(
-      new anchor.BN(10000),
+      new anchor.BN(100),
       nonce,
       {
         accounts: {
@@ -150,16 +144,15 @@ describe('mango-examples', () => {
           clientAccountInfo: client_acc_info,
           tokenProgram: splToken.TOKEN_PROGRAM_ID,
           systemProgram: web3.SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         },
         signers: [owner, client],
       }
     );
 
     let client_account_info: ClientAccountInfo = await program.account.clientAccountInfo.fetch(client_acc_info);
-    assert.ok(client_account_info.client_key == client.publicKey);
-    assert.ok(client_account_info.mint == token_mint);
-    assert.ok(client_account_info.amount == 10000);
+    assert.ok(client_account_info.clientKey.toString() == client.publicKey.toString());
+    assert.ok(client_account_info.mint.toString() == token_mint.toString());
+    assert.ok(client_account_info.amount.toNumber() == 100);
   });
 
 });

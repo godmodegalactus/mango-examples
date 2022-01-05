@@ -90,7 +90,10 @@ pub mod mango_examples {
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.client.key))?;
         }
         msg!("setting client info");
-        let mut client_acc_info = ctx.accounts.client_account_info.load_init()?;
+        let mut client_acc_info = match accounts.client_account_info.load_mut() {
+            Ok(f) => f,
+            Err(_) => accounts.client_account_info.load_init()?,
+        };
         client_acc_info.client_key = *accounts.client.key;
         client_acc_info.mint = accounts.client_token_account.mint;
         client_acc_info.amount += amount;
@@ -133,14 +136,13 @@ pub struct DepositAccounts<'info> {
     client : AccountInfo<'info>,
 
     #[account( init_if_needed,
-        seeds = [b"mango-client-info".as_ref(), &client.key.to_bytes()],
+        seeds = [b"mango-client-info".as_ref(), &client.key.to_bytes(), &owner.key.to_bytes()],
         bump = acc_bump, 
         payer = client, 
-        space = 8 + ClientAccountInfo::LEN )]
+        space = 8 + std::mem::size_of::<ClientAccountInfo>() )]
     client_account_info : Loader<'info, ClientAccountInfo>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 #[account(zero_copy)]
@@ -148,8 +150,4 @@ pub struct ClientAccountInfo{
     pub client_key : Pubkey,
     pub mint : Pubkey,
     pub amount : u64,
-}
-
-impl ClientAccountInfo {
-    pub const LEN : usize = 64 + 64 + 64; 
 }
