@@ -38,7 +38,7 @@ pub mod mango_examples {
         Ok(())
     }
 
-    pub fn deposit(ctx: Context<DepositAccounts>, _name : String, amount : u64, _acc_bump: u8) -> ProgramResult{
+    pub fn deposit(ctx: Context<DepositAccounts>, amount : u64, _acc_bump: u8) -> ProgramResult{
         msg!("start deposit");
         let accounts = &ctx.accounts;
         let account_infos : &[AccountInfo] = &[
@@ -110,7 +110,7 @@ pub struct InitializeAccounts<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(name : String, _amount: u64, acc_bump: u8)]
+#[instruction(_amount: u64, acc_bump: u8)]
 pub struct DepositAccounts<'info> {
     mango_program_ai : AccountInfo<'info>,
     mango_group: AccountInfo<'info>,
@@ -133,7 +133,7 @@ pub struct DepositAccounts<'info> {
     client : AccountInfo<'info>,
 
     #[account( init_if_needed,
-        seeds = [name.as_bytes()],
+        seeds = [b"mango-client-info".as_ref(), &client.key.to_bytes()],
         bump = acc_bump, 
         payer = client, 
         space = 8 + ClientAccountInfo::LEN )]

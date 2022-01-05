@@ -126,16 +126,13 @@ describe('mango-examples', () => {
       client_token_acc.address,
       web3.LAMPORTS_PER_SOL * 2,
     ));
-
     // create client into address
-    let client_name = "client";
-    const [client_acc_info, nonce] = await web3.PublicKey.findProgramAddress([Buffer.from(client_name)], program.programId); /// i do not know why this is not working. Should work normally
+    const [client_acc_info, nonce] = await web3.PublicKey.findProgramAddress([Buffer.from("mango-client-info"), client.publicKey.toBuffer()], program.programId);
     mlog.log('client_acc_info address : ' + client_acc_info);
     mlog.log('client address : ' + client.publicKey);
     mlog.log('owner address : ' + owner.publicKey);
 
     await program.rpc.deposit(
-      client_name,
       new anchor.BN(10000),
       nonce,
       {
