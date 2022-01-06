@@ -92,35 +92,46 @@ describe('mango-examples', () => {
   // initialize for deposit
 
   let mango = new mango_client.MangoClient(connection, new web3.PublicKey(mango_programid));
-  it("Deposit in mango", async () => {
+  let token: splToken.Token = null;
+  let mango_cache: PublicKey = null;
+  let node_bank_key: PublicKey = null;
+  let root_bank: PublicKey = null;
+  let vault: PublicKey = null;
+  let token_mint:PublicKey = null;
+  // create client
+  const client = web3.Keypair.fromSecretKey(bs58.decode("588FU4PktJWfGfxtzpAAXywSNt74AvtroVzGfKkVN1LwRuvHwKGr851uH8czM5qm4iqLbs1kKoMKtMJG4ATR7Ld2"));//web3.Keypair.generate();
+
+  it("Setup accounts", async () => {
     await sleep(10 * 1000); // to avoid too many request error
     // get mango data
     let mango_group = await mango.getMangoGroup(new web3.PublicKey(mango_group_account));
     let cache = await mango_group.loadCache(connection);
     let root_banks = await mango_group.loadRootBanks(connection);
 
-    const node_bank_key = root_banks[tokentIndex].nodeBanks[0];
+    let i = 0;
+    mango_group.tokens.forEach(x=> mlog.log( "index : " + (++i) + " root bank " + x.rootBank + " mint : " + x.mint ));
+
+    node_bank_key = root_banks[tokentIndex].nodeBanks[0];
     const node_bank_acc = await connection.getAccountInfo(node_bank_key);
     const node_bank = mango_client.NodeBankLayout.decode(node_bank_acc.data);
-    const vault = new web3.PublicKey(node_bank.vault);
-    const mango_cache = cache.publicKey;
-    const root_bank = root_banks[tokentIndex].publicKey;
-
-    // create client
-    const client = web3.Keypair.fromSecretKey(bs58.decode("588FU4PktJWfGfxtzpAAXywSNt74AvtroVzGfKkVN1LwRuvHwKGr851uH8czM5qm4iqLbs1kKoMKtMJG4ATR7Ld2"));//web3.Keypair.generate();
+    vault = new web3.PublicKey(node_bank.vault);
+    mango_cache = cache.publicKey;
+    root_bank = root_banks[tokentIndex].publicKey;
     await connection.confirmTransaction(await connection.requestAirdrop(
       client.publicKey,
       web3.LAMPORTS_PER_SOL * 1,
     ));
-    await sleep(10 * 1000);
 
-    const token_mint = mango_group.tokens[tokentIndex].mint;
-    var token = new splToken.Token(
+    token_mint = mango_group.tokens[tokentIndex].mint;
+    token = new splToken.Token(
       connection,
       token_mint,
       splToken.TOKEN_PROGRAM_ID,
       client
     );
+  });
+
+  it("Deposit in mango", async () => {
 
     const client_token_acc = await token.getOrCreateAssociatedAccountInfo(client.publicKey);
     // create client into address
@@ -153,6 +164,72 @@ describe('mango-examples', () => {
     assert.ok(client_account_info.clientKey.toString() == client.publicKey.toString());
     assert.ok(client_account_info.mint.toString() == token_mint.toString());
     assert.ok(client_account_info.amount.toNumber() == 100);
+
+    //deposit 50 usdc more
+    await program.rpc.deposit(
+      new anchor.BN(50),
+      nonce,
+      {
+        accounts: {
+          mangoProgramAi: mango_programid,
+          mangoGroup: mango_group_account,
+          mangoAccount: mango_account,
+          owner: owner.publicKey,
+          mangoCacheAi: mango_cache,
+          rootBankAi: root_bank,
+          nodeBankAi: node_bank_key,
+          vault: vault,
+          clientTokenAccount: client_token_acc.address,
+          client: client.publicKey,
+          clientAccountInfo: client_acc_info,
+          tokenProgram: splToken.TOKEN_PROGRAM_ID,
+          systemProgram: web3.SystemProgram.programId,
+        },
+        signers: [owner, client],
+      }
+    );
+    let client_account_info2: ClientAccountInfo = await program.account.clientAccountInfo.fetch(client_acc_info);
+    assert.ok(client_account_info2.clientKey.toString() == client.publicKey.toString());
+    assert.ok(client_account_info2.mint.toString() == token_mint.toString());
+    assert.ok(client_account_info2.amount.toNumber() == 150);
+  });
+
+  it("Withdraw from mango", async () => {
+
+    const client_token_acc = await token.getOrCreateAssociatedAccountInfo(client.publicKey);
+    mlog.log("owner : " + owner.publicKey);
+    mlog.log("client : " + client.publicKey);
+    mlog.log("mango_group_id : " + mango_group_account);
+    mlog.log("client token account : " + client_token_acc.address);
+    mlog.log("mango_programid : " + mango_programid);
+    mlog.log("mango_account : " + mango_account);
+    mlog.log("mango_cache : " + mango_cache);
+    mlog.log("root_bank : " + root_bank);
+    mlog.log("node_bank_key : " + node_bank_key);
+    mlog.log("vault : " + vault);
+    // create client into address
+    const [client_acc_info, nonce] = await web3.PublicKey.findProgramAddress([Buffer.from("mango-client-info"), client.publicKey.toBuffer(), owner.publicKey.toBuffer()], program.programId);
+    mlog.log("client_acc_info : " + client_acc_info);
+    await program.rpc.withdraw(
+      new anchor.BN(150),
+      {
+        accounts :{
+          mangoProgramAi: mango_programid,
+          mangoGroup: mango_group_account,
+          mangoAccount: mango_account,
+          owner: owner.publicKey,
+          mangoCacheAi: mango_cache,
+          rootBankAi: root_bank,
+          nodeBankAi: node_bank_key,
+          vault: vault,
+          clientTokenAccount: client_token_acc.address,
+          client: client.publicKey,
+          clientAccountInfo: client_acc_info,
+          tokenProgram: splToken.TOKEN_PROGRAM_ID,
+        },
+        signers: [owner],
+      }
+    );
   });
 
 });

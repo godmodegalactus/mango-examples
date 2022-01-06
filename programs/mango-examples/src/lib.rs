@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use mango::instruction::{MangoInstruction};
-use anchor_spl::token::{self, Token, TokenAccount, SetAuthority};
+use anchor_spl::token::{self, Token, TokenAccount, SetAuthority, CloseAccount};
 use spl_token::instruction::AuthorityType;
 use solana_program::instruction::{AccountMeta};
 
@@ -99,6 +99,62 @@ pub mod mango_examples {
         client_acc_info.amount += amount;
         Ok(())
     }
+
+    pub fn withdraw( ctx: Context<WithdrawAccounts>, amount : u64 )  -> ProgramResult {
+        msg!("check if can withdraw");
+        let accounts = &ctx.accounts;
+        let mut client_acc_info = accounts.client_account_info.load_mut()?;
+        assert!(client_acc_info.client_key == *accounts.client.key);
+        assert!(client_acc_info.mint == accounts.client_token_account.mint);
+        assert!(accounts.client_token_account.owner == *accounts.client.key);
+        assert!(client_acc_info.amount >= amount);
+
+        msg!("start withdraw");
+        let account_infos : &[AccountInfo] = &[
+            accounts.mango_program_ai.clone(),
+            accounts.mango_group.clone(),
+            accounts.mango_account.clone(),
+            accounts.owner.clone(),
+            accounts.mango_cache_ai.clone(),
+            accounts.root_bank_ai.clone(),
+            accounts.node_bank_ai.clone(),
+            accounts.vault.clone(),
+            accounts.client_token_account.to_account_info().clone(),
+            accounts.owner.to_account_info().clone(),
+            accounts.token_program.to_account_info().clone(),
+        ];
+        let open_orders = [Pubkey::default(); mango::state::MAX_PAIRS];
+        let withdraw_instruction = mango::instruction::withdraw(accounts.mango_program_ai.key,
+            accounts.mango_group.key,
+            accounts.mango_account.key,
+            accounts.owner.key,
+            accounts.mango_cache_ai.key,
+            accounts.root_bank_ai.key,
+            accounts.node_bank_ai.key,
+            accounts.vault.key,
+            accounts.client_token_account.to_account_info().key,
+            accounts.owner.key,
+            &open_orders,
+            amount,
+            false)?;
+        // call mango
+        msg!("invoke mango");
+        invoke( &withdraw_instruction, account_infos) ?;
+        msg!("invoke done");
+        client_acc_info.amount -= amount;
+        if client_acc_info.amount == 0 {
+            // client has no more deposit close its account
+            let cpi_accounts = CloseAccount {
+                account: ctx.accounts.client_account_info.to_account_info().clone(),
+                destination: ctx.accounts.client.clone(),
+                authority: ctx.accounts.client.clone(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+            token::close_account(cpi_ctx)?;
+        }
+        Ok(())
+    }
 }
 
 // check instruction.rs in mango-v3 repo to find out which accounts are required.
@@ -143,6 +199,31 @@ pub struct DepositAccounts<'info> {
     client_account_info : Loader<'info, ClientAccountInfo>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(amount: u64)]
+pub struct WithdrawAccounts<'info> {
+    mango_program_ai : AccountInfo<'info>,
+    #[account(mut)]
+    mango_group: AccountInfo<'info>,
+    #[account(mut)]
+    mango_account: AccountInfo<'info>,
+    #[account(mut, signer)]
+    owner : AccountInfo<'info>,
+    mango_cache_ai : AccountInfo<'info>,
+    root_bank_ai : AccountInfo<'info>,
+    #[account(mut)]
+    node_bank_ai : AccountInfo<'info>,
+    #[account(mut)]
+    vault : AccountInfo<'info>,
+    
+    #[account(mut)]
+    client_token_account : Account<'info, TokenAccount>,
+    client: AccountInfo<'info>,
+    #[account(mut)]
+    client_account_info : Loader<'info, ClientAccountInfo>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[account(zero_copy)]
