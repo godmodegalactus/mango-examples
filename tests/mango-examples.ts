@@ -29,8 +29,7 @@ describe('mango-examples', () => {
 
   const programId = program.programId;
   const owner = anchor.web3.Keypair.generate();
-  let mngo = 'MNGO';
-  let mango_account = null;
+  let mango_account : PublicKey;
 
   it("Initialize mango account", async () => {
     // get some SOL into owners account
@@ -40,48 +39,18 @@ describe('mango-examples', () => {
     await connection.confirmTransaction(airdropSignature);
 
     // create an account with seed for mango program id
-    {
-      const acc = await web3.PublicKey.createWithSeed(
-        owner.publicKey,
-        mngo,
-        mango_programid,
-      );
-      const size = mango_client.MangoAccountLayout.span;
-      const lamports = await connection.getMinimumBalanceForRentExemption(size);
-
-      const transaction = new web3.Transaction().add(
-        web3.SystemProgram.createAccountWithSeed({
-          fromPubkey: owner.publicKey,
-          basePubkey: owner.publicKey,
-          seed: mngo,
-          newAccountPubkey: acc,
-          lamports,
-          space: size,
-          programId: mango_programid,
-        }));
-      transaction.feePayer = owner.publicKey;
-      let hash = await connection.getRecentBlockhash();
-      console.log("blockhash", hash);
-      transaction.recentBlockhash = hash.blockhash;
-      const info = await connection.getAccountInfo(owner.publicKey);
-      console.log(info);
-      // Sign transaction, broadcast, and confirm
-      const signature = await web3.sendAndConfirmTransaction(
-        connection,
-        transaction,
-        [owner],
-        { commitment: 'confirmed' },
-      );
-      mango_account = acc;
-    }
+    const [acc, bump] = await PublicKey.findProgramAddress([Buffer.from("mango_account"), owner.publicKey.toBuffer()],program.programId);
+    mango_account = acc;
     // call initailize account code
     await program.rpc.initializeAccount(
+      bump,
       {
         accounts: {
           mangoProgramAi: mango_programid,
           mangoGroup: mango_group_account,
           mangoAccount: mango_account,
-          owner: owner.publicKey,
+          user: owner.publicKey,
+          systemProgram : web3.SystemProgram.programId,
         },
         signers: [owner],
       }
@@ -107,10 +76,6 @@ describe('mango-examples', () => {
     let mango_group = await mango.getMangoGroup(new web3.PublicKey(mango_group_account));
     let cache = await mango_group.loadCache(connection);
     let root_banks = await mango_group.loadRootBanks(connection);
-
-    let i = 0;
-    mango_group.tokens.forEach(x=> mlog.log( "index : " + (++i) + " root bank " + x.rootBank + " mint : " + x.mint ));
-
     node_bank_key = root_banks[tokentIndex].nodeBanks[0];
     const node_bank_acc = await connection.getAccountInfo(node_bank_key);
     const node_bank = mango_client.NodeBankLayout.decode(node_bank_acc.data);
@@ -197,21 +162,11 @@ describe('mango-examples', () => {
   it("Withdraw from mango", async () => {
 
     const client_token_acc = await token.getOrCreateAssociatedAccountInfo(client.publicKey);
-    mlog.log("owner : " + owner.publicKey);
-    mlog.log("client : " + client.publicKey);
-    mlog.log("mango_group_id : " + mango_group_account);
-    mlog.log("client token account : " + client_token_acc.address);
-    mlog.log("mango_programid : " + mango_programid);
-    mlog.log("mango_account : " + mango_account);
-    mlog.log("mango_cache : " + mango_cache);
-    mlog.log("root_bank : " + root_bank);
-    mlog.log("node_bank_key : " + node_bank_key);
-    mlog.log("vault : " + vault);
     // create client into address
     const [client_acc_info, nonce] = await web3.PublicKey.findProgramAddress([Buffer.from("mango-client-info"), client.publicKey.toBuffer(), owner.publicKey.toBuffer()], program.programId);
     mlog.log("client_acc_info : " + client_acc_info);
     await program.rpc.withdraw(
-      new anchor.BN(150),
+      new anchor.BN(75),
       {
         accounts :{
           mangoProgramAi: mango_programid,

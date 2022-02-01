@@ -4,27 +4,30 @@ use anchor_spl::token::{self, Token, TokenAccount, SetAuthority, CloseAccount};
 use spl_token::instruction::AuthorityType;
 use solana_program::instruction::{AccountMeta};
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+// Update this id to your program id before deploying to devnet
+declare_id!("Cr85wTvxggTtTZAKnsgJXwR7rqz4e488TCFS4rV7TTij");
+
+const MANGO_ACCOUNT : &[u8] = b"mango_account";
 
 #[program]
 pub mod mango_examples {
     use solana_program::program::invoke;
 
     use super::*;
-    pub fn initialize_account(ctx: Context<InitializeAccounts>) -> ProgramResult {
+    pub fn initialize_account(ctx: Context<InitializeAccounts>, _bump : u8) -> ProgramResult {
         msg!("started");
         
         let mango_instruction = MangoInstruction::InitMangoAccount;
         let account_infos : &[AccountInfo] = &[ ctx.accounts.mango_program_ai.to_account_info().clone(),
                                                 ctx.accounts.mango_group.to_account_info().clone(), 
                                                 ctx.accounts.mango_account.to_account_info().clone(),
-                                                ctx.accounts.owner.to_account_info().clone()];
+                                                ctx.accounts.user.to_account_info().clone()];
         msg!("Create instructions");
         let group_key : Pubkey = *ctx.accounts.mango_group.to_account_info().key;
         let accounts = vec![
             AccountMeta::new_readonly(group_key, false),
             AccountMeta::new(*ctx.accounts.mango_account.to_account_info().key, false),
-            AccountMeta::new_readonly(*ctx.accounts.owner.to_account_info().key, true),
+            AccountMeta::new_readonly(*ctx.accounts.user.to_account_info().key, true),
         ];
         let data = mango_instruction.pack();
         let sol_instruction = solana_program::instruction::Instruction {
@@ -40,7 +43,7 @@ pub mod mango_examples {
 
     pub fn deposit(ctx: Context<DepositAccounts>, amount : u64, _acc_bump: u8) -> ProgramResult{
         msg!("start deposit");
-        let accounts = &ctx.accounts;
+        let accounts = ctx.accounts;
         let account_infos : &[AccountInfo] = &[
             accounts.mango_program_ai.clone(),
             accounts.mango_group.clone(),
@@ -90,10 +93,7 @@ pub mod mango_examples {
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.client.key))?;
         }
         msg!("setting client info");
-        let mut client_acc_info = match accounts.client_account_info.load_mut() {
-            Ok(f) => f,
-            Err(_) => accounts.client_account_info.load_init()?,
-        };
+        let client_acc_info = &mut accounts.client_account_info;
         client_acc_info.client_key = *accounts.client.key;
         client_acc_info.mint = accounts.client_token_account.mint;
         client_acc_info.amount += amount;
@@ -102,8 +102,8 @@ pub mod mango_examples {
 
     pub fn withdraw( ctx: Context<WithdrawAccounts>, amount : u64 )  -> ProgramResult {
         msg!("check if can withdraw");
-        let accounts = &ctx.accounts;
-        let mut client_acc_info = accounts.client_account_info.load_mut()?;
+        let accounts = ctx.accounts;
+        let client_acc_info = &mut accounts.client_account_info;
         assert!(client_acc_info.client_key == *accounts.client.key);
         assert!(client_acc_info.mint == accounts.client_token_account.mint);
         assert!(accounts.client_token_account.owner == *accounts.client.key);
@@ -145,11 +145,11 @@ pub mod mango_examples {
         if client_acc_info.amount == 0 {
             // client has no more deposit close its account
             let cpi_accounts = CloseAccount {
-                account: ctx.accounts.client_account_info.to_account_info().clone(),
-                destination: ctx.accounts.client.clone(),
-                authority: ctx.accounts.client.clone(),
+                account: accounts.client_account_info.to_account_info().clone(),
+                destination: accounts.client.clone(),
+                authority: accounts.client.clone(),
             };
-            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_program = accounts.token_program.to_account_info().clone();
             let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
             token::close_account(cpi_ctx)?;
         }
@@ -159,13 +159,20 @@ pub mod mango_examples {
 
 // check instruction.rs in mango-v3 repo to find out which accounts are required.
 #[derive(Accounts)]
+#[instruction(acc_bump : u8)]
 pub struct InitializeAccounts<'info> {
     mango_program_ai : AccountInfo<'info>,
     mango_group: AccountInfo<'info>,
-    #[account(mut, constraint = *mango_account.owner == *mango_program_ai.key)]
+    #[account( init, 
+        seeds = [MANGO_ACCOUNT, &user.key.to_bytes()], 
+        bump = acc_bump, 
+        payer = user,
+        owner = *mango_program_ai.key,
+        space = std::mem::size_of::<mango::state::MangoAccount>() )]
     mango_account: AccountInfo<'info>,
-    //#[account(signer)]
-    owner: Signer<'info>,
+    #[account(mut, signer)]
+    user: AccountInfo<'info>,
+    system_program : AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -196,7 +203,7 @@ pub struct DepositAccounts<'info> {
         bump = acc_bump, 
         payer = client, 
         space = 8 + std::mem::size_of::<ClientAccountInfo>() )]
-    client_account_info : Loader<'info, ClientAccountInfo>,
+    client_account_info : Account<'info, ClientAccountInfo>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -222,11 +229,11 @@ pub struct WithdrawAccounts<'info> {
     client_token_account : Account<'info, TokenAccount>,
     client: AccountInfo<'info>,
     #[account(mut)]
-    client_account_info : Loader<'info, ClientAccountInfo>,
+    client_account_info : Account<'info, ClientAccountInfo>,
     pub token_program: Program<'info, Token>,
 }
 
-#[account(zero_copy)]
+#[account()]
 pub struct ClientAccountInfo{
     pub client_key : Pubkey,
     pub mint : Pubkey,
