@@ -5,7 +5,7 @@ use spl_token::instruction::AuthorityType;
 use solana_program::instruction::{AccountMeta};
 
 // Update this id to your program id before deploying to devnet
-declare_id!("Cr85wTvxggTtTZAKnsgJXwR7rqz4e488TCFS4rV7TTij");
+declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 const MANGO_ACCOUNT : &[u8] = b"mango_account";
 
@@ -123,7 +123,25 @@ pub mod mango_examples {
             accounts.owner.to_account_info().clone(),
             accounts.token_program.to_account_info().clone(),
         ];
-        let open_orders = [Pubkey::default(); mango::state::MAX_PAIRS];
+        let open_orders = { 
+            let mango_account = mango::state::MangoAccount::load_checked(&accounts.mango_account, accounts.mango_program_ai.key, accounts.mango_group.key)?;
+            mango_account.spot_open_orders
+        };
+
+        msg!("{}",accounts.mango_program_ai.key.to_string());
+        msg!("{}",accounts.mango_group.key.to_string());
+        msg!("{}",accounts.mango_account.key.to_string());
+        msg!("{}",accounts.owner.key.to_string());
+        msg!("{}",accounts.mango_cache_ai.key.to_string());
+        msg!("{}",accounts.root_bank_ai.key.to_string());
+        msg!("{}",accounts.node_bank_ai.key.to_string());
+        msg!("{}",accounts.vault.key.to_string());
+        msg!("{}",accounts.client_token_account.key().to_string());
+        msg!("{}",accounts.owner.key.to_string());
+        msg!("{}",open_orders.len());
+        msg!("{}",open_orders[0]);
+        msg!("{}",open_orders[14]);
+
         let withdraw_instruction = mango::instruction::withdraw(accounts.mango_program_ai.key,
             accounts.mango_group.key,
             accounts.mango_account.key,
