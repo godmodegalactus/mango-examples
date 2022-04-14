@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use std::io::Write as IoWrite;
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("37kmCqYKw41NJxMFVDT5HanZGhwKBQTQJD5hfiYBML7Z");
 
 #[program]
 pub mod writer_utils {
@@ -16,6 +16,7 @@ pub mod writer_utils {
 
 #[derive(Accounts)]
 pub struct Write<'info> {
+    /// CHECK: used for test we do not really care
     #[account(mut, signer)]
     target: AccountInfo<'info>,
 }

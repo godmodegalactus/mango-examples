@@ -5,7 +5,7 @@ use spl_token::instruction::AuthorityType;
 use solana_program::instruction::{AccountMeta};
 
 // Update this id to your program id before deploying to devnet
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("7bSjhB5Mqwqczh9vgL1fXuGi13Mpnq3Kr57dHnaukNMB");
 
 const MANGO_ACCOUNT : &[u8] = b"mango_account";
 
@@ -48,7 +48,7 @@ pub mod mango_examples {
             accounts.mango_program_ai.clone(),
             accounts.mango_group.clone(),
             accounts.mango_account.clone(),
-            accounts.owner.clone(),
+            accounts.owner.to_account_info().clone(),
             accounts.mango_cache_ai.clone(),
             accounts.root_bank_ai.clone(),
             accounts.node_bank_ai.clone(),
@@ -62,7 +62,7 @@ pub mod mango_examples {
             // temporarily transfer authority of account to owner before applying 
             let cpi_acc = SetAuthority {
                 account_or_mint: accounts.client_token_account.to_account_info().clone(),
-                current_authority: accounts.client.clone(),
+                current_authority: accounts.client.to_account_info().clone(),
             };
             let cpi = CpiContext::new(accounts.token_program.to_account_info(), cpi_acc);
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.owner.key))?;
@@ -87,7 +87,7 @@ pub mod mango_examples {
             // transfer ownership back to the client
             let cpi_acc = SetAuthority {
                 account_or_mint: accounts.client_token_account.to_account_info().clone(),
-                current_authority: accounts.owner.clone(),
+                current_authority: accounts.owner.to_account_info().clone(),
             };
             let cpi = CpiContext::new(accounts.token_program.to_account_info(), cpi_acc);
             token::set_authority( cpi,  AuthorityType::AccountOwner, Some(*accounts.client.key))?;
@@ -114,7 +114,7 @@ pub mod mango_examples {
             accounts.mango_program_ai.clone(),
             accounts.mango_group.clone(),
             accounts.mango_account.clone(),
-            accounts.owner.clone(),
+            accounts.owner.to_account_info().clone(),
             accounts.mango_cache_ai.clone(),
             accounts.root_bank_ai.clone(),
             accounts.node_bank_ai.clone(),
@@ -177,48 +177,59 @@ pub mod mango_examples {
 
 // check instruction.rs in mango-v3 repo to find out which accounts are required.
 #[derive(Accounts)]
-#[instruction(acc_bump : u8)]
 pub struct InitializeAccounts<'info> {
+    /// CHECK: Will be checked by mango
     mango_program_ai : AccountInfo<'info>,
+
+     /// CHECK: Will be checked by mango
     mango_group: AccountInfo<'info>,
+
+     /// CHECK: Will be checked by mango
     #[account( init, 
-        seeds = [MANGO_ACCOUNT, &user.key.to_bytes()], 
-        bump = acc_bump, 
+        seeds = [MANGO_ACCOUNT, &user.key.to_bytes()],
+        bump,
         payer = user,
         owner = *mango_program_ai.key,
         space = std::mem::size_of::<mango::state::MangoAccount>() )]
     mango_account: AccountInfo<'info>,
-    #[account(mut, signer)]
-    user: AccountInfo<'info>,
-    system_program : AccountInfo<'info>,
+    #[account(mut)]
+    user: Signer<'info>,
+    system_program : Program<'info, System>,
 }
 
 #[derive(Accounts)]
 #[instruction(_amount: u64, acc_bump: u8)]
 pub struct DepositAccounts<'info> {
+     /// CHECK: Will be checked by mango
     mango_program_ai : AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     mango_group: AccountInfo<'info>,
     #[account(mut)]
+     /// CHECK: Will be checked by mango
     mango_account: AccountInfo<'info>,
-    #[account(mut, signer)]
-    owner : AccountInfo<'info>,
+    #[account(mut)]
+    owner : Signer<'info>,
+     /// CHECK: Will be checked by mango
     mango_cache_ai : AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     root_bank_ai : AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     #[account(mut)]
     node_bank_ai : AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     #[account(mut)]
     vault : AccountInfo<'info>,
     
     #[account(mut)]
     client_token_account : Account<'info, TokenAccount>,
 // custom fields
-    #[account(mut, signer,
+    #[account(mut,
         constraint = client_token_account.owner == *client.key)]
-    client : AccountInfo<'info>,
+    client : Signer<'info>,
 
     #[account( init_if_needed,
         seeds = [b"mango-client-info".as_ref(), &client.key.to_bytes(), &owner.key.to_bytes()],
-        bump = acc_bump, 
+        bump, 
         payer = client, 
         space = 8 + std::mem::size_of::<ClientAccountInfo>() )]
     client_account_info : Account<'info, ClientAccountInfo>,
@@ -229,22 +240,30 @@ pub struct DepositAccounts<'info> {
 #[derive(Accounts)]
 #[instruction(amount: u64)]
 pub struct WithdrawAccounts<'info> {
+     /// CHECK: Will be checked by mango
     mango_program_ai : AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     #[account(mut)]
     mango_group: AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     #[account(mut)]
     mango_account: AccountInfo<'info>,
-    #[account(mut, signer)]
-    owner : AccountInfo<'info>,
+    #[account(mut)]
+    owner : Signer<'info>,
+     /// CHECK: Will be checked by mango
     mango_cache_ai : AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     root_bank_ai : AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     #[account(mut)]
     node_bank_ai : AccountInfo<'info>,
+     /// CHECK: Will be checked by mango
     #[account(mut)]
     vault : AccountInfo<'info>,
     
     #[account(mut)]
     client_token_account : Account<'info, TokenAccount>,
+    /// CHECK: Client account
     client: AccountInfo<'info>,
     #[account(mut)]
     client_account_info : Account<'info, ClientAccountInfo>,
